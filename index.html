@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CueVerse Sports Book</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-2: #0b1220;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #22c55e;
+      --accent-dark: #16a34a;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 18px;
+    }
+    .bankroll-box {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .pill {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.92rem;
+    }
+    .pill strong { color: var(--accent); }
+    nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.92rem;
+    }
+    button:hover { border-color: var(--accent); }
+    button.active {
+      background: var(--accent);
+      color: #052e16;
+      border-color: var(--accent);
+    }
+    button.primary {
+      background: var(--accent);
+      color: #052e16;
+      border-color: var(--accent);
+    }
+    button.primary:hover { background: var(--accent-dark); }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .option-card {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .option-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    input, select {
+      background: var(--card-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.95rem;
+      width: 100%;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .status-banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      font-size: 0.92rem;
+      display: none;
+    }
+    .status-banner.ok { display: block; background: rgba(34,197,94,0.15); border: 1px solid var(--accent); color: #bbf7d0; }
+    .status-banner.err { display: block; background: rgba(239,68,68,0.15); border: 1px solid var(--danger); color: #fecaca; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge.open { background: rgba(34,197,94,0.2); color: #86efac; }
+    .badge.locked { background: rgba(245,158,11,0.2); color: #fcd34d; }
+    .badge.settled { background: rgba(148,163,184,0.2); color: #cbd5e1; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1 style="margin:0; font-size:1.35rem;">CueVerse Sports Book</h1>
+        <div class="muted">Play-money tournament futures • +50 bonus every 5 bets</div>
+      </div>
+      <div id="user-hud" class="bankroll-box hidden">
+        <div class="pill">Player: <strong id="hud-name">-</strong></div>
+        <div class="pill">Chips: <strong id="hud-balance">0</strong></div>
+        <div class="pill">Rally Bonus: <strong id="hud-rally">0 / 5</strong></div>
+        <button id="btn-logout">Log Out</button>
+      </div>
+    </header>
+
+    <div id="banner" class="status-banner"></div>
+
+    <!-- AUTH SECTION -->
+    <section id="auth-section" class="panel">
+      <div class="row" style="margin-bottom:14px;">
+        <button id="tab-login" class="active">Log In</button>
+        <button id="tab-signup">Create Account (1,000 Chips)</button>
+      </div>
+      <div id="auth-form" class="grid-2">
+        <div id="signup-name-wrap" class="hidden">
+          <label class="muted">Display Name</label>
+          <input id="auth-name" type="text" placeholder="e.g., Alex" />
+        </div>
+        <div>
+          <label class="muted">Email</label>
+          <input id="auth-email" type="email" placeholder="you@example.com" />
+        </div>
+        <div>
+          <label class="muted">Password</label>
+          <input id="auth-password" type="password" placeholder="At least 6 characters" />
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <button id="btn-auth-submit" class="primary">Log In</button>
+      </div>
+    </section>
+
+    <!-- MAIN APP -->
+    <main id="app-section" class="hidden">
+      <nav>
+        <button class="nav-btn active" data-view="board">The Board</button>
+        <button class="nav-btn" data-view="bets">My Bets</button>
+        <button class="nav-btn" data-view="leaderboard">Leaderboard</button>
+        <button class="nav-btn hidden" id="nav-godmode" data-view="godmode">Godmode</button>
+      </nav>
+
+      <!-- BOARD VIEW -->
+      <section id="view-board">
+        <div class="panel">
+          <label class="muted">Select Active Tournament</label>
+          <select id="tournament-select" style="margin-top:6px;"></select>
+          <div id="tournament-meta" class="row" style="margin-top:12px; justify-content:space-between;">
+            <div>
+              <strong id="t-title">No tournaments yet</strong>
+              <span id="t-badge" class="badge open" style="margin-left:8px;">Open</span>
+            </div>
+            <div class="pill">Timer: <strong id="t-countdown">--</strong></div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <h2 style="margin-top:0; font-size:1.1rem;">Contenders & Odds</h2>
+            <div id="options-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+          </div>
+
+          <div class="panel">
+            <h2 style="margin-top:0; font-size:1.1rem;">Bet Slip</h2>
+            <p id="slip-selected" class="muted">Click a contender on the left to select.</p>
+            <label class="muted">Wager Amount (Chips)</label>
+            <input id="wager-input" type="number" min="1" step="1" value="50" style="margin:6px 0 10px;" />
+            <div class="row" style="margin-bottom:12px;">
+              <button type="button" class="quick-add" data-add="25">+25</button>
+              <button type="button" class="quick-add" data-add="50">+50</button>
+              <button type="button" class="quick-add" data-add="100">+100</button>
+              <button type="button" id="btn-clear-wager">Clear</button>
+            </div>
+            <p class="muted">Estimated Payout: <strong id="est-payout" style="color:var(--text);">0</strong> chips</p>
+            <button id="btn-place-bet" class="primary" style="width:100%;" disabled>Place Future Bet</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- MY BETS VIEW -->
+      <section id="view-bets" class="panel hidden">
+        <h2 style="margin-top:0; font-size:1.15rem;">My Wagers</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Tournament</th>
+              <th>Pick</th>
+              <th>Wager</th>
+              <th>Payout</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="bets-tbody"></tbody>
+        </table>
+      </section>
+
+      <!-- LEADERBOARD VIEW -->
+      <section id="view-leaderboard" class="panel hidden">
+        <div class="row" style="justify-content:space-between; margin-bottom:12px;">
+          <h2 style="margin:0; font-size:1.15rem;">Top 5 Leaderboard</h2>
+          <div class="row">
+            <button id="lb-all-time" class="active">All-Time Top 5</button>
+            <button id="lb-monthly">Monthly Top 5</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Player</th>
+              <th id="lb-metric-col">Chip Balance</th>
+            </tr>
+          </thead>
+          <tbody id="lb-tbody"></tbody>
+        </table>
+      </section>
+
+      <!-- GODMODE VIEW (ADMIN ONLY) -->
+      <section id="view-godmode" class="hidden">
+        <div class="panel">
+          <h2 style="margin-top:0; font-size:1.15rem;">Create New Future Tournament</h2>
+          <div class="grid-2">
+            <div>
+              <label class="muted">Tournament Title</label>
+              <input id="new-t-title" type="text" placeholder="e.g., Fall 8-Ball Championship" />
+            </div>
+            <div>
+              <label class="muted">Betting Window (Days Before Lock)</label>
+              <input id="new-t-days" type="number" min="0.01" step="0.5" value="7" />
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <label class="muted">Contenders & Decimal Odds (one per line: <code>Player Name, 3.50</code>)</label>
+            <textarea id="new-t-options" rows="4" style="width:100%; background:var(--card-2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:9px 12px; margin-top:4px;">Alex Mercer, 3.20
+Sam Rivera, 4.50
+Jordan Lee, 6.00
+Taylor Brooks, 8.00</textarea>
+          </div>
+          <button id="btn-create-tournament" class="primary" style="margin-top:12px;">Launch Tournament</button>
+        </div>
+
+        <div class="panel">
+          <h2 style="margin-top:0; font-size:1.15rem;">Settle Winners (Up to 4 Winners, e.g., Quarter-Finalists)</h2>
+          <select id="settle-t-select" style="margin-bottom:10px;"></select>
+          <div id="settle-options-box" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+          <button id="btn-settle-tournament" class="primary">Confirm Winner(s) & Pay Out</button>
+        </div>
+
+        <div class="panel">
+          <h2 style="margin-top:0; font-size:1.15rem;">Adjust Player Chips</h2>
+          <div class="grid-2">
+            <div>
+              <label class="muted">Player</label>
+              <select id="adj-user-select"></select>
+            </div>
+            <div>
+              <label class="muted">Chip Change (use negative to subtract, e.g., -100 or +250)</label>
+              <input id="adj-delta-input" type="number" step="1" value="100" />
+            </div>
+          </div>
+          <button id="btn-adjust-chips" class="primary" style="margin-top:12px;">Update Chip Balance</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://dulqogtlujmiqaphezsh.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_douQwWgD-yFDtrDMMiR4Vg_RgsgXsrx';
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentUser = null;
+    let currentProfile = null;
+    let tournaments = [];
+    let options = [];
+    let selectedTournamentId = null;
+    let selectedOptionId = null;
+    let authMode = 'login';
+    let lbMode = 'all_time';
+    let allProfiles = [];
+
+    const $ = (id) => document.getElementById(id);
+
+    function showBanner(msg, type = 'ok') {
+      const el = $('banner');
+      el.textContent = msg;
+      el.className = `status-banner ${type}`;
+    }
+
+    function clearBanner() {
+      const el = $('banner');
+      el.className = 'status-banner';
+      el.textContent = '';
+    }
+
+    function updateHud() {
+      if (!currentUser || !currentProfile) {
+        $('user-hud').classList.add('hidden');
+        $('auth-section').classList.remove('hidden');
+        $('app-section').classList.add('hidden');
+        return;
+      }
+      $('auth-section').classList.add('hidden');
+      $('app-section').classList.remove('hidden');
+      $('user-hud').classList.remove('hidden');
+      $('hud-name').textContent = currentProfile.display_name;
+      $('hud-balance').textContent = currentProfile.balance.toLocaleString();
+      const progress = currentProfile.bets_placed % 5;
+      $('hud-rally').textContent = `${progress} / 5`;
+      $('nav-godmode').classList.toggle('hidden', !currentProfile.is_admin);
+    }
+
+    async function loadSession() {
+      const { data: { session } } = await sb.auth.getSession();
+      currentUser = session?.user ?? null;
+      if (currentUser) {
+        await refreshProfile();
+        await refreshAll();
+      } else {
+        currentProfile = null;
+        updateHud();
+      }
+    }
+
+    async function refreshProfile() {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .single();
+      if (!error) currentProfile = data;
+      updateHud();
+    }
+
+    async function refreshAll() {
+      const [{ data: tData }, { data: oData }, { data: pData }] = await Promise.all([
+        sb.from('tournaments').select('*').order('created_at', { ascending: false }),
+        sb.from('tournament_options').select('*').order('player_name', { ascending: true }),
+        sb.from('profiles').select('id, display_name, balance, is_admin').order('display_name')
+      ]);
+      tournaments = tData || [];
+      options = oData || [];
+      allProfiles = pData || [];
+
+      if (!selectedTournamentId && tournaments.length > 0) {
+        selectedTournamentId = tournaments[0].id;
+      } else if (selectedTournamentId && !tournaments.some(t => t.id === selectedTournamentId)) {
+        selectedTournamentId = tournaments[0]?.id ?? null;
+      }
+
+      renderTournamentSelector();
+      renderBoard();
+      renderMyBets();
+      renderLeaderboard();
+      if (currentProfile?.is_admin) renderGodmode();
+    }
+
+    function isTournamentOpen(t) {
+      if (!t) return false;
+      return t.status === 'open' && new Date() < new Date(t.closes_at);
+    }
+
+    function renderTournamentSelector() {
+      const sel = $('tournament-select');
+      sel.innerHTML = '';
+      if (tournaments.length === 0) {
+        sel.innerHTML = '<option value="">No tournaments created yet</option>';
+        return;
+      }
+      tournaments.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.title} (${t.status})`;
+        if (t.id === selectedTournamentId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function formatCountdown(closesAtIso) {
+      const diff = new Date(closesAtIso).getTime() - Date.now();
+      if (diff <= 0) return 'LOCKED';
+      const totalSec = Math.floor(diff / 1000);
+      const days = Math.floor(totalSec / 86400);
+      const hours = Math.floor((totalSec % 86400) / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+      return `${days}d ${hours}h ${mins}m ${secs}s`;
+    }
+
+    function renderBoard() {
+      const t = tournaments.find(x => x.id === selectedTournamentId);
+      const listEl = $('options-list');
+      listEl.innerHTML = '';
+
+      if (!t) {
+        $('t-title').textContent = 'No tournaments available yet';
+        $('t-badge').textContent = 'Waiting';
+        $('t-badge').className = 'badge locked';
+        $('t-countdown').textContent = '--';
+        $('btn-place-bet').disabled = true;
+        return;
+      }
+
+      const open = isTournamentOpen(t);
+      $('t-title').textContent = t.title;
+      $('t-badge').textContent = t.status === 'settled' ? 'Settled' : (open ? 'Open' : 'Locked');
+      $('t-badge').className = `badge ${t.status === 'settled' ? 'settled' : (open ? 'open' : 'locked')}`;
+      $('t-countdown').textContent = t.status === 'settled' ? 'Finished' : formatCountdown(t.closes_at);
+
+      const tOptions = options.filter(o => o.tournament_id === t.id);
+      if (!tOptions.some(o => o.id === selectedOptionId)) {
+        selectedOptionId = null;
+      }
+
+      tOptions.forEach(o => {
+        const isWinner = Array.isArray(t.winning_option_ids) && t.winning_option_ids.includes(o.id);
+        const card = document.createElement('div');
+        card.className = `option-card ${o.id === selectedOptionId ? 'selected' : ''}`;
+        card.innerHTML = `
+          <div>
+            <strong>${o.player_name}</strong>
+            ${isWinner ? '<span class="badge open" style="margin-left:8px;">Winner</span>' : ''}
+            <div class="muted">Odds: ${Number(o.odds_decimal).toFixed(2)}x</div>
+          </div>
+          <button type="button" ${!open ? 'disabled' : ''}>${o.id === selectedOptionId ? 'Selected' : 'Pick'}</button>
+        `;
+        card.querySelector('button').addEventListener('click', () => {
+          if (!open) return;
+          selectedOptionId = o.id;
+          renderBoard();
+          updateSlipPreview();
+        });
+        listEl.appendChild(card);
+      });
+
+      updateSlipPreview();
+    }
+
+    function updateSlipPreview() {
+      const t = tournaments.find(x => x.id === selectedTournamentId);
+      const opt = options.find(o => o.id === selectedOptionId);
+      const wager = Math.max(0, parseInt($('wager-input').value || '0', 10));
+      const open = isTournamentOpen(t);
+
+      if (!opt || !t) {
+        $('slip-selected').textContent = 'Click a contender on the left to select.';
+        $('est-payout').textContent = '0';
+        $('btn-place-bet').disabled = true;
+        return;
+      }
+
+      $('slip-selected').textContent = `${opt.player_name} (${Number(opt.odds_decimal).toFixed(2)}x)`;
+      const payout = Math.floor(wager * Number(opt.odds_decimal));
+      $('est-payout').textContent = payout.toLocaleString();
+      $('btn-place-bet').disabled = !open || wager <= 0 || (currentProfile && wager > currentProfile.balance);
+    }
+
+    async function renderMyBets() {
+      const tbody = $('bets-tbody');
+      tbody.innerHTML = '';
+      if (!currentUser) return;
+
+      const { data: myBets, error } = await sb
+        .from('bets')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (error || !myBets || myBets.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">No bets placed yet.</td></tr>';
+        return;
+      }
+
+      const tMap = Object.fromEntries(tournaments.map(t => [t.id, t.title]));
+      const oMap = Object.fromEntries(options.map(o => [o.id, o.player_name]));
+
+      myBets.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${tMap[b.tournament_id] || 'Tournament'}</td>
+          <td>${oMap[b.option_id] || 'Contender'}</td>
+          <td>${b.wager.toLocaleString()}</td>
+          <td>${b.potential_payout.toLocaleString()}</td>
+          <td><span class="badge ${b.status === 'won' ? 'open' : (b.status === 'lost' ? 'locked' : 'settled')}">${b.status}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function renderLeaderboard() {
+      const tbody = $('lb-tbody');
+      tbody.innerHTML = '';
+      const viewName = lbMode === 'all_time' ? 'leaderboard_all_time' : 'leaderboard_monthly';
+      $('lb-metric-col').textContent = lbMode === 'all_time' ? 'Chip Balance' : 'Monthly Net Profit';
+
+      const { data, error } = await sb.from(viewName).select('*');
+      if (error || !data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="muted">No leaderboard data yet.</td></tr>';
+        return;
+      }
+
+      data.forEach((row, idx) => {
+        const metricVal = lbMode === 'all_time' ? row.balance : row.monthly_net;
+        const formatted = lbMode === 'monthly' && metricVal > 0 ? `+${metricVal.toLocaleString()}` : Number(metricVal).toLocaleString();
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>#${idx + 1}</td>
+          <td>${row.display_name}</td>
+          <td><strong>${formatted}</strong></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderGodmode() {
+      const settleSel = $('settle-t-select');
+      settleSel.innerHTML = '';
+      const unsettled = tournaments.filter(t => t.status !== 'settled');
+      unsettled.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.title;
+        settleSel.appendChild(opt);
+      });
+      renderSettleOptions();
+
+      const adjSel = $('adj-user-select');
+      adjSel.innerHTML = '';
+      allProfiles.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.display_name} (${p.balance.toLocaleString()} chips)`;
+        adjSel.appendChild(opt);
+      });
+    }
+
+    function renderSettleOptions() {
+      const box = $('settle-options-box');
+      box.innerHTML = '';
+      const tid = $('settle-t-select').value;
+      const tOpts = options.filter(o => o.tournament_id === tid);
+      tOpts.forEach(o => {
+        const row = document.createElement('label');
+        row.className = 'row';
+        row.innerHTML = `<input type="checkbox" class="winner-chk" value="${o.id}" style="width:auto;" /> <span>${o.player_name} (${Number(o.odds_decimal).toFixed(2)}x)</span>`;
+        box.appendChild(row);
+      });
+    }
+
+    // Auth UI
+    $('tab-login').addEventListener('click', () => {
+      authMode = 'login';
+      $('tab-login').classList.add('active');
+      $('tab-signup').classList.remove('active');
+      $('signup-name-wrap').classList.add('hidden');
+      $('btn-auth-submit').textContent = 'Log In';
+    });
+
+    $('tab-signup').addEventListener('click', () => {
+      authMode = 'signup';
+      $('tab-signup').classList.add('active');
+      $('tab-login').classList.remove('active');
+      $('signup-name-wrap').classList.remove('hidden');
+      $('btn-auth-submit').textContent = 'Create Account';
+    });
+
+    $('btn-auth-submit').addEventListener('click', async () => {
+      clearBanner();
+      const email = $('auth-email').value.trim();
+      const password = $('auth-password').value;
+      const displayName = $('auth-name').value.trim();
+
+      if (authMode === 'signup') {
+        const { error } = await sb.auth.signUp({
+          email,
+          password,
+          options: { data: { display_name: displayName || email.split('@')[0] } }
+        });
+        if (error) return showBanner(error.message, 'err');
+        showBanner('Account created! Check your email if confirmation is enabled, or log in.', 'ok');
+      } else {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) return showBanner(error.message, 'err');
+        showBanner('Welcome back!', 'ok');
+      }
+      await loadSession();
+    });
+
+    $('btn-logout').addEventListener('click', async () => {
+      await sb.auth.signOut();
+      selectedOptionId = null;
+      await loadSession();
+    });
+
+    // Navigation
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const view = btn.dataset.view;
+        ['board', 'bets', 'leaderboard', 'godmode'].forEach(v => {
+          $(`view-${v}`).classList.toggle('hidden', v !== view);
+        });
+        if (view === 'bets') renderMyBets();
+        if (view === 'leaderboard') renderLeaderboard();
+        if (view === 'godmode') renderGodmode();
+      });
+    });
+
+    // Wager controls
+    $('tournament-select').addEventListener('change', (e) => {
+      selectedTournamentId = e.target.value;
+      selectedOptionId = null;
+      renderBoard();
+    });
+
+    document.querySelectorAll('.quick-add').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const add = parseInt(btn.dataset.add, 10);
+        const cur = Math.max(0, parseInt($('wager-input').value || '0', 10));
+        const maxCap = currentProfile ? currentProfile.balance : cur + add;
+        $('wager-input').value = Math.min(maxCap, cur + add);
+        updateSlipPreview();
+      });
+    });
+
+    $('btn-clear-wager').addEventListener('click', () => {
+      $('wager-input').value = 0;
+      updateSlipPreview();
+    });
+
+    $('wager-input').addEventListener('input', updateSlipPreview);
+
+    $('btn-place-bet').addEventListener('click', async () => {
+      clearBanner();
+      const wager = parseInt($('wager-input').value, 10);
+      const { data, error } = await sb.rpc('place_future_bet', {
+        p_tournament_id: selectedTournamentId,
+        p_option_id: selectedOptionId,
+        p_wager: wager
+      });
+      if (error) return showBanner(error.message, 'err');
+      const bonusMsg = data?.bonus_awarded > 0 ? ` (+${data.bonus_awarded} rally bonus!)` : '';
+      showBanner(`Bet placed! Potential payout: ${data.potential_payout} chips${bonusMsg}`, 'ok');
+      await refreshProfile();
+      await refreshAll();
+    });
+
+    // Leaderboard toggle
+    $('lb-all-time').addEventListener('click', () => {
+      lbMode = 'all_time';
+      $('lb-all-time').classList.add('active');
+      $('lb-monthly').classList.remove('active');
+      renderLeaderboard();
+    });
+
+    $('lb-monthly').addEventListener('click', () => {
+      lbMode = 'monthly';
+      $('lb-monthly').classList.add('active');
+      $('lb-all-time').classList.remove('active');
+      renderLeaderboard();
+    });
+
+    // Godmode actions
+    $('btn-create-tournament').addEventListener('click', async () => {
+      clearBanner();
+      const title = $('new-t-title').value.trim();
+      const days = parseFloat($('new-t-days').value || '7');
+      const lines = $('new-t-options').value.split('\n').map(l => l.trim()).filter(Boolean);
+
+      if (!title || lines.length < 2) {
+        return showBanner('Enter a tournament title and at least 2 contenders.', 'err');
+      }
+
+      const closesAt = new Date(Date.now() + days * 86400000).toISOString();
+      const { data: created, error: tErr } = await sb
+        .from('tournaments')
+        .insert({ title, closes_at: closesAt, status: 'open' })
+        .select()
+        .single();
+
+      if (tErr) return showBanner(tErr.message, 'err');
+
+      const rows = lines.map(line => {
+        const parts = line.split(',');
+        const name = (parts[0] || '').trim();
+        const odds = parseFloat((parts[1] || '2.0').trim()) || 2.0;
+        return { tournament_id: created.id, player_name: name, odds_decimal: odds };
+      });
+
+      const { error: oErr } = await sb.from('tournament_options').insert(rows);
+      if (oErr) return showBanner(oErr.message, 'err');
+
+      $('new-t-title').value = '';
+      selectedTournamentId = created.id;
+      showBanner(`Launched "${title}"!`, 'ok');
+      await refreshAll();
+    });
+
+    $('settle-t-select').addEventListener('change', renderSettleOptions);
+
+    $('btn-settle-tournament').addEventListener('click', async () => {
+      clearBanner();
+      const tid = $('settle-t-select').value;
+      const checkedIds = Array.from(document.querySelectorAll('.winner-chk:checked')).map(c => c.value);
+      if (!tid || checkedIds.length === 0) {
+        return showBanner('Select at least one winner (up to 4).', 'err');
+      }
+      if (checkedIds.length > 4) {
+        return showBanner('You can select at most 4 winners.', 'err');
+      }
+      const { error } = await sb.rpc('admin_settle_tournament', {
+        p_tournament_id: tid,
+        p_winner_option_ids: checkedIds
+      });
+      if (error) return showBanner(error.message, 'err');
+      showBanner('Tournament settled and winning chips paid out!', 'ok');
+      await refreshProfile();
+      await refreshAll();
+    });
+
+    $('btn-adjust-chips').addEventListener('click', async () => {
+      clearBanner();
+      const targetId = $('adj-user-select').value;
+      const delta = parseInt($('adj-delta-input').value, 10);
+      if (!targetId || Number.isNaN(delta) || delta === 0) {
+        return showBanner('Choose a player and enter a non-zero chip adjustment.', 'err');
+      }
+      const { error } = await sb.rpc('admin_adjust_balance', {
+        p_target_user_id: targetId,
+        p_delta: delta
+      });
+      if (error) return showBanner(error.message, 'err');
+      showBanner('Player chip balance updated!', 'ok');
+      await refreshProfile();
+      await refreshAll();
+    });
+
+    // Live countdown refresh every second
+    setInterval(() => {
+      const t = tournaments.find(x => x.id === selectedTournamentId);
+      if (t && t.status !== 'settled') {
+        $('t-countdown').textContent = formatCountdown(t.closes_at);
+        if (!isTournamentOpen(t)) {
+          renderBoard();
+        }
+      }
+    }, 1000);
+
+    sb.auth.onAuthStateChange(async (_event, session) => {
+      currentUser = session?.user ?? null;
+      if (currentUser) {
+        await refreshProfile();
+        await refreshAll();
+      } else {
+        currentProfile = null;
+        updateHud();
+      }
+    });
+
+    loadSession();
+  </script>
+</body>
+</html>
